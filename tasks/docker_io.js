@@ -18,7 +18,7 @@ module.exports = function(grunt) {
 
   grunt.registerMultiTask('docker_io', 'Build and Push Docker Images', function() {
     // Merge task-specific and/or target-specific options with these defaults.
-    var DOCKER_HUB_URL = "http://hub.docker.io"
+    var DOCKER_HUB_URL = "https://hub.docker.io"
     var REQUIRES_LOGIN = "Please login prior to push:"
     var opts = this.options({
       dockerFileLocation: '.',
@@ -56,7 +56,7 @@ module.exports = function(grunt) {
     }
 
     // Check that user is logged in
-    runIf(true, function(){
+    runIf(opts.push, function(){
       var loginOpts = ['login']
       if(opts.pushLocation !== DOCKER_HUB_URL) {
         loginOpts.push(opts.pushLocation)
@@ -77,40 +77,36 @@ module.exports = function(grunt) {
       })
     })
 
-    if( typeof opts.tag === 'string')
+    if (typeof opts.tag === 'string' && opts.tag.trim() !== '') {
       opts.tag = opts.tag.split(',')
-    if(opts.tag === '' || opts.tag === [] || opts.tag === 'latest') {
-      opts.tag = [];
-      opts.tag.push('latest')
+    } else {
+        opts.tag = []
     }
-    var tagCount = opts.tag.length;
-    for(var i = 0; i < tagCount; i++) {
-      runIf
-      ( opts.dockerFileLocation !== ''
-        && opts.buildName !== ''
-      , function(i){
-          var buildOpts = ['build']
-          var buildName = getBase();
-          buildOpts.push('-t')
-          buildOpts.push(buildName + ':' + opts.tag[0])
-          buildOpts.push(opts.dockerFileLocation)
-          console.log(buildOpts.join(' '))
-          var dockerBuild = spawn('docker', buildOpts)
-          dockerBuild.stdout.on('data', function(data){
-            grunt.log.ok(data)
-          })
-          dockerBuild.stderr.on('data', function(data){
-            grunt.fatal('Could not build image - ' +  data)
-          })
-          dockerBuild.on('exit', function(code){
-            if(code === 0) {
-              opts.tag.shift()
-              next()
-            } else {
-              grunt.fatal('Error Building image')
-            }
-          })
-        }
+    opts.tag.push('latest')
+    for (var i = 0, l = opts.tag.length; i < l; i++) {
+        runIf(opts.dockerFileLocation !== '' && opts.buildName !== '', function (tag) {
+            var buildOpts = ['build']
+            var buildName = getBase()
+            buildOpts.push('-t')
+            buildOpts.push(buildName + ':' + tag)
+            buildOpts.push(opts.dockerFileLocation)
+            console.log(buildOpts.join(' '))
+            var dockerBuild = spawn('docker', buildOpts)
+            dockerBuild.stdout.on('data', function (data) {
+                grunt.log.ok(data)
+            })
+            dockerBuild.stderr.on('data', function (data) {
+                grunt.fatal('Could not build image - ' + data)
+            })
+            dockerBuild.on('exit', function (code) {
+                if (code === 0) {
+                    opts.tag.shift()
+                    next()
+                } else {
+                    grunt.fatal('Error Building image')
+                }
+            })
+        }.bind(null, opts.tag[i])
       )
     }
     runIf(opts.push, function(){
